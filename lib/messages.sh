@@ -17,7 +17,7 @@ _message() {
   local color="$1"
   local text="$2"
 
-  printf "%b%s - %s%b\n", "$color", "$(date +%T)", "$text", "$_IASI_RESET"
+  printf "%b%s - %s%b\n" "$color" "$(date +%T)" "$text" "$_IASI_RESET"
 }
 
 info() {
