@@ -14,7 +14,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [options]
 
-Lists the repositories that would be cloned from $IASI_ORG.
+Lists the repositories in $IASI_ORG that would be updated with git pull.
 This version does not modify anything.
 
 Options:
@@ -62,14 +62,13 @@ while IFS='|' read -r name url; do
   target="$WORKSPACE_DIR/$name"
 
   if [ -d "$target/.git" ]; then
-    success "$name ya existe."
+    info "Actualizaría $name."
     detail "$target"
   elif [ -e "$target" ]; then
-    warning "$name no se clonaría: el destino ya existe."
+    warning "$name no se actualizaría: el destino existe pero no es un repositorio Git."
     detail "$target"
   else
-    info "Clonaría $name."
+    warning "$name no se actualizaría: no está clonado."
     detail "$url"
-    detail "$target"
   fi
 done <<< "$repositories"
