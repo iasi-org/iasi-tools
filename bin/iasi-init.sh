@@ -18,6 +18,7 @@ Steps:
   1. Recreate the repositories
   2. Install iasi.quarto
   3. Configure iasi-lua in every Quarto project
+  4. Start the Docker containers
 
 Options:
   -h, --help   Show this help
@@ -64,5 +65,15 @@ for step in "${steps[@]}"; do
     exit "$step_status"
   fi
 done
+
+docker_step="$TOOLS_DIR/bin/iasi-docker.sh"
+
+if IASI_VERBOSITY="$IASI_VERBOSITY" "$docker_step" start; then
+  :
+else
+  step_status=$?
+  error "La inicialización se ha detenido en $(basename "$docker_step")."
+  exit "$step_status"
+fi
 
 success "Inicialización completada correctamente."
