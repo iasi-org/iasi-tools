@@ -4,7 +4,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-WORKSPACE_DIR="$(cd -- "$TOOLS_DIR/.." && pwd)"
 
 source "$TOOLS_DIR/lib/messages.sh"
 source "$TOOLS_DIR/lib/arguments.sh"
@@ -12,20 +11,49 @@ source "$TOOLS_DIR/lib/repositories.sh"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [options]
+Usage: $(basename "$0") [options] [repository]
 
-Lists the repositories in $IASI_ORG that would be updated with git pull.
-This version does not modify anything.
+Synchronizes repositories from $IASI_ORG, always prioritizing the remote state.
+Without repository, all repositories are synchronized in the current directory.
+With a repository directory, only that repository is synchronized.
+
+Missing repositories are cloned. Existing repositories are reset to the remote
+default branch and untracked files are removed. Command output is written to
+logs/iasi-pull-YYYYMMDDhhmmss.log next to the repositories.
 
 Options:
   -h, --help   Show this help
   -v           Minimal information (default)
   -V           Detailed information
   -s           Silent mode
+  -y, --yes    Do not ask for confirmation
 EOF
 }
 
-if ! iasi_parse_arguments "$@"; then
+repository_argument=""
+options=()
+assume_yes=0
+
+for argument in "$@"; do
+  case "$argument" in
+    -y|--yes)
+      assume_yes=1
+      ;;
+    -*)
+      options+=("$argument")
+      ;;
+    *)
+      if [ -n "$repository_argument" ]; then
+        error "Solo se puede indicar un directorio de repositorio."
+        usage >&2
+        exit 2
+      fi
+      repository_argument="$argument"
+      ;;
+  esac
+done
+
+if ! iasi_parse_arguments "${options[@]}"; then
   error "Opción no válida: $IASI_ARGUMENT_ERROR"
   usage >&2
   exit 2
@@ -36,39 +64,156 @@ if [ "$IASI_HELP" -eq 1 ]; then
   exit 0
 fi
 
-command -v git >/dev/null 2>&1 || {
-  error "Git no está instalado o no está disponible en PATH."
-  exit 1
-}
+selected_repository=""
 
-command -v gh >/dev/null 2>&1 || {
-  error "GitHub CLI no está instalado o no está disponible en PATH."
-  exit 1
-}
+if [ -n "$repository_argument" ]; then
+  if [ -d "$repository_argument" ]; then
+    repository_path="$(cd -- "$repository_argument" && pwd)"
+  else
+    repository_path="$repository_argument"
+    while [ "$repository_path" != "/" ] && [[ "$repository_path" == */ ]]; do
+      repository_path="${repository_path%/}"
+    done
+  fi
 
-gh auth status >/dev/null 2>&1 || {
-  error "GitHub CLI no está autenticado. Ejecuta: gh auth login"
-  exit 1
-}
+  selected_repository="$(basename -- "$repository_path")"
+  workspace_argument="$(dirname -- "$repository_path")"
 
-if ! repositories="$(iasi_repositories)"; then
-  error "No se pudo obtener la lista de repositorios de $IASI_ORG."
+  if [[ ! "$selected_repository" =~ ^[a-zA-Z0-9._-]+$ ]] || \
+     [ "$selected_repository" = "." ] || [ "$selected_repository" = ".." ]; then
+    error "Nombre de repositorio no válido: $selected_repository"
+    exit 2
+  fi
+else
+  workspace_argument="$PWD"
+fi
+
+if [ "$assume_yes" -eq 0 ]; then
+  if [ -n "$selected_repository" ]; then
+    confirmation_text="El estado local de $repository_argument se sobrescribirá con la versión remota."
+  else
+    confirmation_text="Los repositorios locales en $workspace_argument se sobrescribirán con las versiones remotas."
+  fi
+
+  if ! confirm "$confirmation_text"; then
+    info "Operación cancelada."
+    exit 0
+  fi
+fi
+
+if [ ! -d "$workspace_argument" ]; then
+  if ! mkdir -p -- "$workspace_argument"; then
+    error "No se pudo crear el directorio de trabajo: $workspace_argument"
+    exit 1
+  fi
+
+  info "Directorio de trabajo creado: $workspace_argument"
+fi
+
+WORKSPACE_DIR="$(cd -- "$workspace_argument" && pwd)"
+LOG_DIR="$WORKSPACE_DIR/logs"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/$SCRIPT_NAME-$(date +%Y%m%d%H%M%S).log"
+
+if ! mkdir -p -- "$LOG_DIR"; then
+  error "No se pudo crear el directorio de logs: $LOG_DIR"
   exit 1
 fi
 
-while IFS='|' read -r name url; do
+cd -- "$WORKSPACE_DIR"
+
+{
+  printf "IASI pull started at %s\n" "$(date --iso-8601=seconds)"
+  printf "Organization: %s\n" "$IASI_ORG"
+  printf "Workspace: %s\n" "$WORKSPACE_DIR"
+  printf "Repository: %s\n\n" "${selected_repository:-all}"
+} > "$LOG_FILE"
+
+if ! repositories="$(iasi_repositories 2>> "$LOG_FILE")"; then
+  error "No se pudo obtener la lista de repositorios de $IASI_ORG."
+  detail "Consulta el log: $LOG_FILE"
+  exit 1
+fi
+
+repository_found=0
+
+while IFS='|' read -r name url default_branch; do
   [ -n "$name" ] || continue
+
+  if [ -n "$selected_repository" ] && [ "$name" != "$selected_repository" ]; then
+    continue
+  fi
+
+  repository_found=1
+
+  if [[ ! "$name" =~ ^[a-zA-Z0-9._-]+$ ]] || [ "$name" = "." ] || [ "$name" = ".." ]; then
+    error "Nombre de repositorio no válido: $name"
+    detail "Consulta el log: $LOG_FILE"
+    exit 1
+  fi
+
+  if [ -z "$default_branch" ]; then
+    error "GitHub no indicó la rama por defecto de $name."
+    detail "Consulta el log: $LOG_FILE"
+    exit 1
+  fi
 
   target="$WORKSPACE_DIR/$name"
 
-  if [ -d "$target/.git" ]; then
-    info "Actualizaría $name."
-    detail "$target"
-  elif [ -e "$target" ]; then
-    warning "$name no se actualizaría: el destino existe pero no es un repositorio Git."
-    detail "$target"
-  else
-    warning "$name no se actualizaría: no está clonado."
+  if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+    info "Clonando $name."
     detail "$url"
+    detail "$target"
+
+    if ! git clone "$url" "$target" >> "$LOG_FILE" 2>&1; then
+      error "No se pudo clonar $name."
+      detail "Consulta el log: $LOG_FILE"
+      exit 1
+    fi
+  elif [ ! -d "$target/.git" ]; then
+    info "Sustituyendo $name por el repositorio remoto."
+    detail "$target"
+
+    if ! rm -rf -- "$target" >> "$LOG_FILE" 2>&1 || \
+       ! git clone "$url" "$target" >> "$LOG_FILE" 2>&1; then
+      error "No se pudo recrear $name."
+      detail "Consulta el log: $LOG_FILE"
+      exit 1
+    fi
+  else
+    info "Sincronizando $name con origin/$default_branch."
+    detail "$target"
+
+    if ! {
+      if git -C "$target" remote get-url origin >> "$LOG_FILE" 2>&1; then
+        git -C "$target" remote set-url origin "$url" >> "$LOG_FILE" 2>&1
+      else
+        git -C "$target" remote add origin "$url" >> "$LOG_FILE" 2>&1
+      fi
+    }; then
+      error "No se pudo configurar origin para $name."
+      detail "Consulta el log: $LOG_FILE"
+      exit 1
+    fi
+
+    if ! git -C "$target" fetch --prune origin >> "$LOG_FILE" 2>&1 || \
+       ! git -C "$target" checkout -f -B "$default_branch" "origin/$default_branch" >> "$LOG_FILE" 2>&1 || \
+       ! git -C "$target" reset --hard "origin/$default_branch" >> "$LOG_FILE" 2>&1 || \
+       ! git -C "$target" clean -fd >> "$LOG_FILE" 2>&1; then
+      error "No se pudo sincronizar $name."
+      detail "Consulta el log: $LOG_FILE"
+      exit 1
+    fi
   fi
+
+  success "$name sincronizado."
 done <<< "$repositories"
+
+if [ -n "$selected_repository" ] && [ "$repository_found" -eq 0 ]; then
+  error "$selected_repository no pertenece a $IASI_ORG o está archivado."
+  detail "Consulta el log: $LOG_FILE"
+  exit 1
+fi
+
+success "Repositorios sincronizados correctamente."
+detail "Log: $LOG_FILE"

@@ -36,27 +36,12 @@ if [ "$IASI_HELP" -eq 1 ]; then
   exit 0
 fi
 
-command -v git >/dev/null 2>&1 || {
-  error "Git no está instalado o no está disponible en PATH."
-  exit 1
-}
-
-command -v gh >/dev/null 2>&1 || {
-  error "GitHub CLI no está instalado o no está disponible en PATH."
-  exit 1
-}
-
-gh auth status >/dev/null 2>&1 || {
-  error "GitHub CLI no está autenticado. Ejecuta: gh auth login"
-  exit 1
-}
-
 if ! repositories="$(iasi_repositories)"; then
   error "No se pudo obtener la lista de repositorios de $IASI_ORG."
   exit 1
 fi
 
-while IFS='|' read -r name url; do
+while IFS='|' read -r name url default_branch; do
   [ -n "$name" ] || continue
 
   target="$WORKSPACE_DIR/$name"

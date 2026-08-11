@@ -10,6 +10,6 @@ iasi_repositories() {
   gh repo list "$IASI_ORG" \
     --limit 100 \
     --no-archived \
-    --json name,sshUrl \
-    --jq '.[] | "\(.name)|\(.sshUrl)"'
+    --json name,sshUrl,defaultBranchRef \
+    --jq '.[] | "\(.name)|\(.sshUrl)|\(.defaultBranchRef.name)"'
 }

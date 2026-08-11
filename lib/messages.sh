@@ -7,10 +7,11 @@
 IASI_VERBOSITY="${IASI_VERBOSITY:-1}"
 
 # Colors
-_IASI_BLUE="\033[0;34m"
+_IASI_BOLD="\033[1m"
 _IASI_GREEN="\033[0;32m"
 _IASI_YELLOW="\033[0;33m"
 _IASI_RED="\033[0;31m"
+_IASI_BOLD_RED="\033[1;31m"
 _IASI_RESET="\033[0m"
 
 _message() {
@@ -22,12 +23,12 @@ _message() {
 
 info() {
   [ "$IASI_VERBOSITY" -ge 1 ] || return 0
-  _message "$_IASI_BLUE" "$1"
+  _message "$_IASI_BOLD" "$1"
 }
 
 detail() {
   [ "$IASI_VERBOSITY" -ge 2 ] || return 0
-  _message "$_IASI_BLUE" "$1"
+  _message "$_IASI_BOLD" "$1"
 }
 
 success() {
@@ -38,6 +39,16 @@ success() {
 warning() {
   [ "$IASI_VERBOSITY" -ge 1 ] || return 0
   _message "$_IASI_YELLOW" "$1"
+}
+
+confirm() {
+  local text="$1"
+  local response=""
+
+  printf "%b%s (Y/N) %b" "$_IASI_BOLD_RED" "$text" "$_IASI_RESET"
+  read -r response || return 1
+
+  [[ "$response" =~ ^[Yy]$ ]]
 }
 
 error() {
