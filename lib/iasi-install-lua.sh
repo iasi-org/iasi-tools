@@ -94,6 +94,7 @@ fi
 for quarto_config in "${quarto_projects[@]}"; do
   quarto_directory="$(dirname -- "$quarto_config")"
   detail "$quarto_directory"
+  printf "Quarto directory: %s\n" "$quarto_directory" >> "$LOG_FILE"
 
   if ! (
     cd -- "$quarto_directory"
