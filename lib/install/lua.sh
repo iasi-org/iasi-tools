@@ -3,16 +3,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-TOOLS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+TOOLS_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
-source "$TOOLS_DIR/lib/messages.sh"
-source "$TOOLS_DIR/lib/arguments.sh"
+source "$TOOLS_DIR/lib/core/messages.sh"
+source "$TOOLS_DIR/lib/core/arguments.sh"
 
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [options] [workspace]
 
-Installs iasi.quarto from the iasi_quarto repository.
+Adds iasi-lua to every Quarto project under the workspace.
 
 Options:
   -h, --help   Show this help
@@ -61,13 +61,13 @@ if [ ! -d "$workspace_argument" ]; then
   exit 1
 fi
 
-IASI_ROOT="$(cd -- "$workspace_argument" && pwd)"
-QUARTO_DIR="$IASI_ROOT/iasi_quarto"
+export IASI_ROOT="$(cd -- "$workspace_argument" && pwd)"
+LUA_DIR="$IASI_ROOT/iasi-lua"
 LOG_DIR="$IASI_ROOT/logs"
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh)-$(date +%Y%m%d%H%M%S).log"
 
-if [ ! -d "$QUARTO_DIR" ]; then
-  error "No se encontró el repositorio: $QUARTO_DIR"
+if [ ! -d "$LUA_DIR" ]; then
+  error "No se encontró el repositorio: $LUA_DIR"
   exit 1
 fi
 
@@ -77,20 +77,38 @@ if ! mkdir -p -- "$LOG_DIR"; then
 fi
 
 {
-  printf "IASI init step 2 started at %s\n" "$(date --iso-8601=seconds)"
+  printf "IASI init step 3 started at %s\n" "$(date --iso-8601=seconds)"
   printf "Workspace: %s\n\n" "$IASI_ROOT"
 } > "$LOG_FILE"
 
-info "Instalando iasi.quarto"
+quarto_projects=()
 
-if ! (
-  cd -- "$IASI_ROOT"
-  Rscript -e 'devtools::install("iasi_quarto")'
-) >> "$LOG_FILE" 2>&1; then
-  error "No se pudo instalar iasi.quarto."
-  detail "Consulta el log: $LOG_FILE"
-  exit 1
+mapfile -d '' -t quarto_projects < <(
+  find "$IASI_ROOT" \
+    -type d -name 'tests' -prune -o \
+    -type f -name '_quarto.yml' -print0 \
+    2>> "$LOG_FILE"
+)
+
+if [ "${#quarto_projects[@]}" -gt 0 ]; then
+  info "Configurando proyectos Quarto"
 fi
 
-success_detail "iasi.quarto instalado."
+for quarto_config in "${quarto_projects[@]}"; do
+  quarto_directory="$(dirname -- "$quarto_config")"
+  detail "$quarto_directory"
+  printf "Quarto directory: %s\n" "$quarto_directory" >> "$LOG_FILE"
+
+  if ! (
+    cd -- "$quarto_directory"
+    quarto add "$IASI_ROOT/iasi-lua" --no-prompt
+  ) >> "$LOG_FILE" 2>&1; then
+    error "No se pudo configurar el proyecto Quarto: $quarto_directory"
+    detail "Consulta el log: $LOG_FILE"
+    exit 1
+  fi
+
+  success_detail "Proyecto Quarto configurado: $quarto_directory"
+done
+
 detail "Log: $LOG_FILE"

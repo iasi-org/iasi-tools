@@ -3,14 +3,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-TOOLS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+TOOLS_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
-source "$TOOLS_DIR/lib/messages.sh"
-source "$TOOLS_DIR/lib/arguments.sh"
+source "$TOOLS_DIR/lib/core/messages.sh"
+source "$TOOLS_DIR/lib/core/arguments.sh"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [options] [workspace]
+Usage: iasi init [options] [workspace]
 
 Runs all IASI initialization steps in order.
 
@@ -51,9 +51,9 @@ if ! iasi_parse_arguments "${options[@]}"; then
 fi
 
 steps=(
-  "$TOOLS_DIR/bin/iasi-clone.sh"
-  "$TOOLS_DIR/lib/iasi-install-iasi-quarto.sh"
-  "$TOOLS_DIR/lib/iasi-install-lua.sh"
+  "$TOOLS_DIR/lib/commands/clone.sh"
+  "$TOOLS_DIR/lib/install/quarto.sh"
+  "$TOOLS_DIR/lib/install/lua.sh"
 )
 
 for step in "${steps[@]}"; do
@@ -66,7 +66,7 @@ for step in "${steps[@]}"; do
   fi
 done
 
-docker_step="$TOOLS_DIR/bin/iasi-docker.sh"
+docker_step="$TOOLS_DIR/lib/commands/docker.sh"
 
 if IASI_VERBOSITY="$IASI_VERBOSITY" "$docker_step" start; then
   :

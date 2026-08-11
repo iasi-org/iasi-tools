@@ -3,15 +3,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-TOOLS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+TOOLS_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
-source "$TOOLS_DIR/lib/messages.sh"
-source "$TOOLS_DIR/lib/arguments.sh"
-source "$TOOLS_DIR/lib/repositories.sh"
+source "$TOOLS_DIR/lib/core/messages.sh"
+source "$TOOLS_DIR/lib/core/arguments.sh"
+source "$TOOLS_DIR/lib/core/repositories.sh"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [options] [repository]
+Usage: iasi pull [options] [repository]
 
 Synchronizes repositories from $IASI_ORG, always prioritizing the remote state.
 Without repository, all repositories are synchronized in the current directory.

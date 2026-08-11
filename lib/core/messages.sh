@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # -----------------------------------------------------------------------------
-# IASI Tools - Common messages
+# IASI Tools - Core messages
 # -----------------------------------------------------------------------------
 
 IASI_VERBOSITY="${IASI_VERBOSITY:-1}"

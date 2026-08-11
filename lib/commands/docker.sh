@@ -3,17 +3,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-TOOLS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-COMPOSE_DIR="$TOOLS_DIR/lib/docker"
+TOOLS_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+COMPOSE_DIR="$TOOLS_DIR/docker"
 COMPOSE_FILE="$COMPOSE_DIR/iasi-compose.yml"
 
-source "$TOOLS_DIR/lib/messages.sh"
+source "$TOOLS_DIR/lib/core/messages.sh"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [start|stop|status]
+Usage: iasi docker [start|stop|status]
 
-Manages the containers defined in lib/docker/iasi-compose.yml.
+Manages the containers defined in docker/iasi-compose.yml.
 Without a command, start is used.
 
 Commands:

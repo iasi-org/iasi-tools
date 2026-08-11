@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # -----------------------------------------------------------------------------
-# IASI Tools - Common repository list
+# IASI Tools - Core repository list
 # -----------------------------------------------------------------------------
 
 IASI_ORG="${IASI_ORG:-iasi-org}"
