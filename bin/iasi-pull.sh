@@ -23,8 +23,7 @@ logs/iasi-pull-YYYYMMDDhhmmss.log next to the repositories.
 
 Options:
   -h, --help   Show this help
-  -v           Minimal information (default)
-  -V           Detailed information
+  -v           Detailed information
   -s           Silent mode
   -y, --yes    Do not ask for confirmation
 EOF
@@ -206,7 +205,7 @@ while IFS='|' read -r name url default_branch; do
     fi
   fi
 
-  success "$name sincronizado."
+  success_detail "$name sincronizado."
 done <<< "$repositories"
 
 if [ -n "$selected_repository" ] && [ "$repository_found" -eq 0 ]; then

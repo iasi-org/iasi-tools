@@ -21,8 +21,7 @@ If workspace is omitted, the current directory is used.
 
 Options:
   -h, --help   Show this help
-  -v           Minimal information (default)
-  -V           Detailed information
+  -v           Detailed information
   -s           Silent mode
   -y, --yes    Do not ask for confirmation
 EOF
@@ -138,7 +137,7 @@ while IFS='|' read -r name url default_branch; do
     exit 1
   fi
 
-  success "$name clonado."
+  success_detail "$name clonado."
 done <<< "$repositories"
 
 success "Repositorios recreados correctamente."

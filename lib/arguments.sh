@@ -14,9 +14,6 @@ iasi_parse_arguments() {
         IASI_HELP=1
         ;;
       -v)
-        IASI_VERBOSITY=1
-        ;;
-      -V)
         IASI_VERBOSITY=2
         ;;
       -s)

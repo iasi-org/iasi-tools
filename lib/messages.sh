@@ -36,6 +36,11 @@ success() {
   _message "$_IASI_GREEN" "$1"
 }
 
+success_detail() {
+  [ "$IASI_VERBOSITY" -ge 2 ] || return 0
+  _message "$_IASI_GREEN" "$1"
+}
+
 warning() {
   [ "$IASI_VERBOSITY" -ge 1 ] || return 0
   _message "$_IASI_YELLOW" "$1"
