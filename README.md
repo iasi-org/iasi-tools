@@ -14,6 +14,7 @@ Available commands:
 
 - `iasi clone [options] [workspace]`
 - `iasi pull [options] [repository]`
+- `iasi commit "message" [repository]`
 - `iasi init [options] [workspace]`
 - `iasi docker [start|stop|status]`
 - `iasi help [command]`
