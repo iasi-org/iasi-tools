@@ -117,9 +117,6 @@ while IFS='|' read -r name url default_branch; do
   target="$WORKSPACE_DIR/$name"
 
   if [ -e "$target" ] || [ -L "$target" ]; then
-    info "Eliminando $name."
-    detail "$target"
-
     if ! rm -rf -- "$target" >> "$LOG_FILE" 2>&1; then
       error "No se pudo eliminar $name."
       detail "Consulta el log: $LOG_FILE"
