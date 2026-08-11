@@ -19,6 +19,9 @@ Available commands:
 - `iasi docker [start|stop|status]`
 - `iasi help [command]`
 
+Command output from underlying tools is written to timestamped files under the
+workspace `logs` directory; the console only shows IASI status messages.
+
 Add `bin` to `PATH` to invoke `iasi` from any directory. Scripts under `lib`
 are internal implementation details and are not part of the public interface.
 

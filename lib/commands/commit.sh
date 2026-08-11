@@ -65,6 +65,7 @@ if [ -n "$repository_argument" ]; then
   fi
 
   repositories+=("$repository_path")
+  workspace_dir="$(dirname -- "$repository_path")"
 else
   workspace_dir="$PWD"
 
@@ -79,6 +80,21 @@ else
   fi
 fi
 
+log_dir="$workspace_dir/logs"
+log_file="$log_dir/iasi-commit-$(date +%Y%m%d%H%M%S).log"
+
+if ! mkdir -p -- "$log_dir"; then
+  error "No se pudo crear el directorio de logs: $log_dir"
+  exit 1
+fi
+
+{
+  printf "IASI commit started at %s\n" "$(date --iso-8601=seconds)"
+  printf "Workspace: %s\n" "$workspace_dir"
+  printf "Repository: %s\n" "${repository_argument:-all}"
+  printf "Message: %s\n\n" "$commit_message"
+} > "$log_file"
+
 committed=0
 unchanged=0
 
@@ -86,29 +102,37 @@ for repository in "${repositories[@]}"; do
   name="$(basename -- "$repository")"
   info "Procesando $name."
 
-  if ! git -C "$repository" add -A .; then
+  printf "[%s]\n" "$name" >> "$log_file"
+
+  if ! git -C "$repository" add -A . >> "$log_file" 2>&1; then
     error "No se pudieron preparar los cambios de $name."
+    detail "Consulta el log: $log_file"
     exit 1
   fi
 
-  if git -C "$repository" diff --cached --quiet; then
+  if git -C "$repository" diff --cached --quiet >> "$log_file" 2>&1; then
     detail "$name no tiene cambios; se omite."
+    printf "No changes.\n\n" >> "$log_file"
     unchanged=$((unchanged + 1))
     continue
   fi
 
-  if ! git -C "$repository" commit -m "$commit_message"; then
+  if ! git -C "$repository" commit -m "$commit_message" >> "$log_file" 2>&1; then
     error "No se pudo crear el commit de $name."
+    detail "Consulta el log: $log_file"
     exit 1
   fi
 
-  if ! git -C "$repository" push; then
+  if ! git -C "$repository" push >> "$log_file" 2>&1; then
     error "No se pudo publicar el commit de $name."
+    detail "Consulta el log: $log_file"
     exit 1
   fi
 
+  printf "\n" >> "$log_file"
   success_detail "$name publicado."
   committed=$((committed + 1))
 done
 
 success "$committed repositorio(s) confirmado(s) y publicado(s); $unchanged sin cambios."
+detail "Log: $log_file"
