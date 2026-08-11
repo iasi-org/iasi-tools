@@ -24,17 +24,62 @@ Options:
   -v           Detailed information
   -s           Silent mode
   -y, --yes    Do not ask for confirmation
+  -r, --resume Clone only repositories that do not exist locally
 EOF
+}
+
+clone_repository() {
+  local name="$1"
+  local url="$2"
+  local target="$3"
+  local attempt=1
+  local delay=0
+  local clone_output=""
+
+  while [ "$attempt" -le 3 ]; do
+    if clone_output="$(git clone "$url" "$target" 2>&1)"; then
+      printf "Attempt %s for %s\n%s\n" "$attempt" "$name" "$clone_output" >> "$LOG_FILE"
+      return 0
+    fi
+
+    printf "Attempt %s for %s failed\n%s\n" "$attempt" "$name" "$clone_output" >> "$LOG_FILE"
+
+    if [ "$attempt" -ge 3 ] || \
+       ! printf "%s\n" "$clone_output" | grep -Eqi \
+         'connection (closed|reset|timed out|refused)|reset by peer|remote end hung up|early EOF|unexpected disconnect|operation timed out|could not resolve host|network is unreachable'; then
+      return 1
+    fi
+
+    case "$attempt" in
+      1) delay=5 ;;
+      2) delay=15 ;;
+    esac
+
+    warning "Conexión interrumpida al clonar $name. Reintentando en ${delay}s."
+
+    if [ -e "$target" ] || [ -L "$target" ]; then
+      if ! rm -rf -- "$target" >> "$LOG_FILE" 2>&1; then
+        return 1
+      fi
+    fi
+
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
 }
 
 workspace_argument=""
 options=()
 assume_yes=0
+resume=0
 
 for argument in "$@"; do
   case "$argument" in
     -y|--yes)
       assume_yes=1
+      ;;
+    -r|--resume)
+      resume=1
       ;;
     -*)
       options+=("$argument")
@@ -65,7 +110,7 @@ if [ -z "$workspace_argument" ]; then
   workspace_argument="$PWD"
 fi
 
-if [ "$assume_yes" -eq 0 ]; then
+if [ "$resume" -eq 0 ] && [ "$assume_yes" -eq 0 ]; then
   if ! confirm "Los repositorios existentes en $workspace_argument se eliminarán y se clonarán de nuevo."; then
     info "Operación cancelada."
     exit 1
@@ -94,7 +139,7 @@ fi
 cd -- "$WORKSPACE_DIR"
 
 {
-  printf "IASI init started at %s\n" "$(date --iso-8601=seconds)"
+  printf "IASI clone started at %s\n" "$(date --iso-8601=seconds)"
   printf "Organization: %s\n" "$IASI_ORG"
   printf "Workspace: %s\n\n" "$WORKSPACE_DIR"
 } > "$LOG_FILE"
@@ -117,6 +162,11 @@ while IFS='|' read -r name url default_branch; do
   target="$WORKSPACE_DIR/$name"
 
   if [ -e "$target" ] || [ -L "$target" ]; then
+    if [ "$resume" -eq 1 ]; then
+      detail "$name ya existe; se omite."
+      continue
+    fi
+
     if ! rm -rf -- "$target" >> "$LOG_FILE" 2>&1; then
       error "No se pudo eliminar $name."
       detail "Consulta el log: $LOG_FILE"
@@ -128,7 +178,7 @@ while IFS='|' read -r name url default_branch; do
   detail "$url"
   detail "$target"
 
-  if ! git clone "$url" "$target" >> "$LOG_FILE" 2>&1; then
+  if ! clone_repository "$name" "$url" "$target"; then
     error "No se pudo clonar $name."
     detail "Consulta el log: $LOG_FILE"
     exit 1
@@ -137,5 +187,9 @@ while IFS='|' read -r name url default_branch; do
   success_detail "$name clonado."
 done <<< "$repositories"
 
-success "Repositorios recreados correctamente."
+if [ "$resume" -eq 1 ]; then
+  success "Repositorios pendientes clonados correctamente."
+else
+  success "Repositorios recreados correctamente."
+fi
 detail "Log: $LOG_FILE"
