@@ -85,7 +85,7 @@ info "Instalando iasi.quarto"
 
 if ! (
   cd -- "$QUARTO_DIR"
-  Rscript -e 'devtools::install("iasi.quarto", upgrade = "never")'
+  Rscript -e 'devtools::install("iasi.quarto")'
 ) >> "$LOG_FILE" 2>&1; then
   error "No se pudo instalar iasi.quarto."
   detail "Consulta el log: $LOG_FILE"
