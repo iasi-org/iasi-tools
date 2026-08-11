@@ -84,7 +84,10 @@ fi
 quarto_projects=()
 
 mapfile -d '' -t quarto_projects < <(
-  find "$IASI_ROOT" -type f -name '_quarto.yml' -print0 2>> "$LOG_FILE"
+  find "$IASI_ROOT" \
+    -type d -name 'tests' -prune -o \
+    -type f -name '_quarto.yml' -print0 \
+    2>> "$LOG_FILE"
 )
 
 if [ "${#quarto_projects[@]}" -gt 0 ]; then
