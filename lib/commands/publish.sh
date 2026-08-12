@@ -14,6 +14,7 @@ Usage: iasi publish "message" [directory]
 Recursively finds directories containing _quarto.yml, then runs
 iasi.quarto::build() and iasi.quarto::publish() in each one. If every project
 succeeds, all affected repositories are committed and pushed with iasi commit.
+Directories named tests are excluded from discovery.
 
 Arguments:
   message     Required commit message
@@ -58,10 +59,50 @@ SEARCH_DIR="$(cd -- "$search_argument" && pwd)"
 LOG_DIR="$SEARCH_DIR/logs"
 LOG_FILE="$LOG_DIR/iasi-publish-$(date +%Y%m%d%H%M%S).log"
 
-if ! command -v Rscript >/dev/null 2>&1; then
-  error "No se encontró Rscript en PATH."
+RSCRIPT_BIN="${IASI_RSCRIPT:-}"
+
+if [ -z "$RSCRIPT_BIN" ] && command -v Rscript >/dev/null 2>&1; then
+  RSCRIPT_BIN="$(command -v Rscript)"
+fi
+
+if [ -z "$RSCRIPT_BIN" ] && [ -n "${R_HOME:-}" ]; then
+  for candidate in "$R_HOME/bin/Rscript" "$R_HOME/bin/Rscript.exe"; do
+    if [ -x "$candidate" ]; then
+      RSCRIPT_BIN="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -z "$RSCRIPT_BIN" ] && [ -d /c/SDK/R ]; then
+  while IFS= read -r candidate; do
+    RSCRIPT_BIN="$candidate"
+  done < <(find /c/SDK/R -maxdepth 3 -type f -iname 'Rscript.exe' | sort -V)
+fi
+
+if [ -z "$RSCRIPT_BIN" ] || [ ! -x "$RSCRIPT_BIN" ]; then
+  error "No se encontró Rscript. Añádelo a PATH o define IASI_RSCRIPT."
   exit 1
 fi
+
+QUARTO_BIN="${IASI_QUARTO:-}"
+
+if [ -z "$QUARTO_BIN" ] && command -v quarto >/dev/null 2>&1; then
+  QUARTO_BIN="$(command -v quarto)"
+fi
+
+if [ -z "$QUARTO_BIN" ] && [ -d /c/SDK/RStudio ]; then
+  while IFS= read -r candidate; do
+    QUARTO_BIN="$candidate"
+  done < <(find /c/SDK/RStudio -maxdepth 8 -type f -iname 'quarto.exe' | sort -V)
+fi
+
+if [ -z "$QUARTO_BIN" ] || [ ! -x "$QUARTO_BIN" ]; then
+  error "No se encontró Quarto. Añádelo a PATH o define IASI_QUARTO."
+  exit 1
+fi
+
+QUARTO_BIN_DIR="$(dirname -- "$QUARTO_BIN")"
 
 if ! mkdir -p -- "$LOG_DIR"; then
   error "No se pudo crear el directorio de logs: $LOG_DIR"
@@ -82,6 +123,7 @@ done < <(
   find "$SEARCH_DIR" \
     -path '*/.git' -prune -o \
     -path '*/.quarto' -prune -o \
+    -path '*/tests' -prune -o \
     -path '*/node_modules' -prune -o \
     -path '*/renv' -prune -o \
     -type f -name '_quarto.yml' -print0
@@ -98,7 +140,8 @@ for project in "${projects[@]}"; do
 
   if ! (
     cd -- "$project"
-    Rscript -e 'iasi.quarto::build(); iasi.quarto::publish()'
+    PATH="$QUARTO_BIN_DIR:$PATH" \
+      "$RSCRIPT_BIN" -e 'iasi.quarto::build(); iasi.quarto::publish()'
   ) >> "$LOG_FILE" 2>&1; then
     error "No se pudo construir o publicar: $project"
     detail "Consulta el log: $LOG_FILE"
