@@ -14,7 +14,7 @@ Available commands:
 
 - `iasi-dev clone [options] [workspace]`
 - `iasi-dev pull [options] [repository]`
-- `iasi-dev sync file [file...]`
+- `iasi-dev sync path [path...]`
 - `iasi-dev publish "message" [directory]`
 - `iasi-dev commit "message" [repository]`
 - `iasi-dev init [options] [workspace]`

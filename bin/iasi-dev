@@ -13,7 +13,7 @@ Usage: iasi-dev <command> [options]
 Commands:
   clone    Recreate the IASI repositories
   pull     Synchronize repositories with their remote state
-  sync     Propagate files from iasi-common to existing copies
+  sync     Propagate files or directories from iasi-common
   publish  Build, publish, commit, and push Quarto projects
   commit   Commit and push repository changes
   init     Run all IASI initialization steps
