@@ -124,11 +124,19 @@ else
   while IFS= read -r -d '' quarto_file; do
     project_dir="$(dirname -- "$quarto_file")"
 
-    if repository_dir="$(git -C "$project_dir" rev-parse --show-toplevel 2>/dev/null)"; then
-      :
-    else
-      repository_dir="$project_dir"
-    fi
+    repository_dir="$project_dir"
+    ancestor="$project_dir"
+
+    while [ "$ancestor" != "/" ] && [ "$ancestor" != "." ]; do
+      if [ -e "$ancestor/.git" ]; then
+        repository_dir="$ancestor"
+        break
+      fi
+
+      parent="$(dirname -- "$ancestor")"
+      [ "$parent" != "$ancestor" ] || break
+      ancestor="$parent"
+    done
 
     already_added=0
     for existing in "${repositories[@]}"; do
@@ -145,6 +153,7 @@ else
     find "$SEARCH_DIR" \
       -path '*/.git' -prune -o \
       -path '*/.quarto' -prune -o \
+      -path '*/.codex*' -prune -o \
       -path '*/tests' -prune -o \
       -path '*/node_modules' -prune -o \
       -path '*/renv' -prune -o \
