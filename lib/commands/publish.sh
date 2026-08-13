@@ -57,8 +57,6 @@ if [ ! -d "$search_argument" ]; then
 fi
 
 SEARCH_DIR="$(cd -- "$search_argument" && pwd)"
-LOG_DIR="$SEARCH_DIR/logs"
-LOG_FILE="$LOG_DIR/iasi-publish-$(date +%Y%m%d%H%M%S).log"
 
 RSCRIPT_BIN="${IASI_RSCRIPT:-}"
 
@@ -104,17 +102,6 @@ if [ -z "$QUARTO_BIN" ] || [ ! -x "$QUARTO_BIN" ]; then
 fi
 
 QUARTO_BIN_DIR="$(dirname -- "$QUARTO_BIN")"
-
-if ! mkdir -p -- "$LOG_DIR"; then
-  error "No se pudo crear el directorio de logs: $LOG_DIR"
-  exit 1
-fi
-
-{
-  printf "IASI publish started at %s\n" "$(date --iso-8601=seconds)"
-  printf "Directory: %s\n" "$SEARCH_DIR"
-  printf "Message: %s\n\n" "$commit_message"
-} > "$LOG_FILE"
 
 repositories=()
 
@@ -168,19 +155,42 @@ fi
 
 for repository_dir in "${repositories[@]}"; do
   info "Construyendo y publicando $repository_dir."
-  printf "[%s]\n" "$repository_dir" >> "$LOG_FILE"
+
+  subprojects=()
+  while IFS= read -r -d '' quarto_file; do
+    project_dir="$(dirname -- "$quarto_file")"
+
+    if [ "$project_dir" != "$repository_dir" ]; then
+      subprojects+=("${project_dir#"$repository_dir"/}")
+    fi
+  done < <(
+    find "$repository_dir" \
+      -path '*/.git' -prune -o \
+      -path '*/.quarto' -prune -o \
+      -path '*/.codex*' -prune -o \
+      -path '*/tests' -prune -o \
+      -path '*/node_modules' -prune -o \
+      -path '*/renv' -prune -o \
+      -type f -name '_quarto.yml' -print0
+  )
+
+  if [ "${#subprojects[@]}" -gt 0 ]; then
+    info "Subproyectos Quarto:"
+
+    for subproject in "${subprojects[@]}"; do
+      info "- $subproject"
+    done
+  fi
 
   if ! (
     cd -- "$repository_dir"
     PATH="$QUARTO_BIN_DIR:$PATH" \
       "$RSCRIPT_BIN" -e 'iasi.quarto::build(); iasi.quarto::publish()'
-  ) >> "$LOG_FILE" 2>&1; then
+  ); then
     error "No se pudo construir o publicar: $repository_dir"
-    detail "Consulta el log: $LOG_FILE"
     exit 1
   fi
 
-  printf "\n" >> "$LOG_FILE"
   success_detail "$repository_dir publicado."
 done
 
@@ -201,4 +211,3 @@ else
 fi
 
 success "${#repositories[@]} repositorio(s) Quarto construido(s) y publicado(s)."
-detail "Log: $LOG_FILE"
