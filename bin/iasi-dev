@@ -8,7 +8,7 @@ COMMANDS_DIR="$TOOLS_DIR/lib/commands"
 
 usage() {
   cat <<'EOF'
-Usage: iasi <command> [options]
+Usage: iasi-dev <command> [options]
 
 Commands:
   clone    Recreate the IASI repositories
@@ -20,7 +20,7 @@ Commands:
   docker   Manage the IASI Docker containers
   help     Show this help or the help for a command
 
-Run 'iasi help <command>' for more information about a command.
+Run 'iasi-dev help <command>' for more information about a command.
 EOF
 }
 
@@ -42,7 +42,7 @@ case "$command" in
     elif [ "$#" -eq 1 ] && [ -x "$COMMANDS_DIR/$1.sh" ]; then
       exec "$COMMANDS_DIR/$1.sh" --help
     else
-      printf "iasi: unknown command: %s\n" "${1:-}" >&2
+      printf "iasi-dev: unknown command: %s\n" "${1:-}" >&2
       usage >&2
       exit 2
     fi
@@ -51,7 +51,7 @@ case "$command" in
     exec "$COMMANDS_DIR/$command.sh" "$@"
     ;;
   *)
-    printf "iasi: unknown command: %s\n" "$command" >&2
+    printf "iasi-dev: unknown command: %s\n" "$command" >&2
     usage >&2
     exit 2
     ;;

@@ -9,11 +9,12 @@ source "$TOOLS_DIR/lib/core/messages.sh"
 
 usage() {
   cat <<'EOF'
-Usage: iasi publish "message" [directory]
+Usage: iasi-dev publish "message" [directory]
 
-Recursively finds directories containing _quarto.yml, then runs
-iasi.quarto::build() and iasi.quarto::publish() in each one. If every project
-succeeds, all affected repositories are committed and pushed with iasi commit.
+Recursively finds repositories containing IASI Quarto projects, then runs
+iasi.quarto::build() and iasi.quarto::publish() once at each repository root.
+Multiproject repositories are assembled into a single root publish/ directory.
+If every repository succeeds, all changes are committed and pushed.
 Directories named tests are excluded from discovery.
 
 Arguments:
@@ -115,41 +116,63 @@ fi
   printf "Message: %s\n\n" "$commit_message"
 } > "$LOG_FILE"
 
-projects=()
+repositories=()
 
-while IFS= read -r -d '' quarto_file; do
-  projects+=("$(dirname -- "$quarto_file")")
-done < <(
-  find "$SEARCH_DIR" \
-    -path '*/.git' -prune -o \
-    -path '*/.quarto' -prune -o \
-    -path '*/tests' -prune -o \
-    -path '*/node_modules' -prune -o \
-    -path '*/renv' -prune -o \
-    -type f -name '_quarto.yml' -print0
-)
+if [ -f "$SEARCH_DIR/_quarto.yml" ] && [ -f "$SEARCH_DIR/_iasi.yml" ]; then
+  repositories+=("$SEARCH_DIR")
+else
+  while IFS= read -r -d '' quarto_file; do
+    project_dir="$(dirname -- "$quarto_file")"
 
-if [ "${#projects[@]}" -eq 0 ]; then
+    if repository_dir="$(git -C "$project_dir" rev-parse --show-toplevel 2>/dev/null)"; then
+      :
+    else
+      repository_dir="$project_dir"
+    fi
+
+    already_added=0
+    for existing in "${repositories[@]}"; do
+      if [ "$existing" = "$repository_dir" ]; then
+        already_added=1
+        break
+      fi
+    done
+
+    if [ "$already_added" -eq 0 ]; then
+      repositories+=("$repository_dir")
+    fi
+  done < <(
+    find "$SEARCH_DIR" \
+      -path '*/.git' -prune -o \
+      -path '*/.quarto' -prune -o \
+      -path '*/tests' -prune -o \
+      -path '*/node_modules' -prune -o \
+      -path '*/renv' -prune -o \
+      -type f -name '_quarto.yml' -print0
+  )
+fi
+
+if [ "${#repositories[@]}" -eq 0 ]; then
   error "No se encontraron proyectos con _quarto.yml en $SEARCH_DIR."
   exit 1
 fi
 
-for project in "${projects[@]}"; do
-  info "Construyendo y publicando $project."
-  printf "[%s]\n" "$project" >> "$LOG_FILE"
+for repository_dir in "${repositories[@]}"; do
+  info "Construyendo y publicando $repository_dir."
+  printf "[%s]\n" "$repository_dir" >> "$LOG_FILE"
 
   if ! (
-    cd -- "$project"
+    cd -- "$repository_dir"
     PATH="$QUARTO_BIN_DIR:$PATH" \
       "$RSCRIPT_BIN" -e 'iasi.quarto::build(); iasi.quarto::publish()'
   ) >> "$LOG_FILE" 2>&1; then
-    error "No se pudo construir o publicar: $project"
+    error "No se pudo construir o publicar: $repository_dir"
     detail "Consulta el log: $LOG_FILE"
     exit 1
   fi
 
   printf "\n" >> "$LOG_FILE"
-  success_detail "$project publicado."
+  success_detail "$repository_dir publicado."
 done
 
 repository=""
@@ -168,5 +191,5 @@ else
   )
 fi
 
-success "${#projects[@]} proyecto(s) Quarto construido(s) y publicado(s)."
+success "${#repositories[@]} repositorio(s) Quarto construido(s) y publicado(s)."
 detail "Log: $LOG_FILE"
