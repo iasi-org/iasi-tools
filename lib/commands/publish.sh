@@ -57,6 +57,8 @@ if [ ! -d "$search_argument" ]; then
 fi
 
 SEARCH_DIR="$(cd -- "$search_argument" && pwd)"
+LOG_DIR="$SEARCH_DIR/logs"
+LOG_FILE="$LOG_DIR/iasi-publish-$(date +%Y%m%d%H%M%S).log"
 
 RSCRIPT_BIN="${IASI_RSCRIPT:-}"
 
@@ -102,6 +104,17 @@ if [ -z "$QUARTO_BIN" ] || [ ! -x "$QUARTO_BIN" ]; then
 fi
 
 QUARTO_BIN_DIR="$(dirname -- "$QUARTO_BIN")"
+
+if ! mkdir -p -- "$LOG_DIR"; then
+  error "No se pudo crear el directorio de logs: $LOG_DIR"
+  exit 1
+fi
+
+{
+  printf "IASI publish started at %s\n" "$(date --iso-8601=seconds)"
+  printf "Directory: %s\n" "$SEARCH_DIR"
+  printf "Message: %s\n\n" "$commit_message"
+} > "$LOG_FILE"
 
 repositories=()
 
@@ -155,6 +168,7 @@ fi
 
 for repository_dir in "${repositories[@]}"; do
   info "Construyendo y publicando $repository_dir."
+  printf "[%s]\n" "$repository_dir" >> "$LOG_FILE"
 
   subprojects=()
   while IFS= read -r -d '' quarto_file; do
@@ -176,9 +190,11 @@ for repository_dir in "${repositories[@]}"; do
 
   if [ "${#subprojects[@]}" -gt 0 ]; then
     info "Subproyectos Quarto:"
+    printf "Subprojects:\n" >> "$LOG_FILE"
 
     for subproject in "${subprojects[@]}"; do
       info "- $subproject"
+      printf -- "- %s\n" "$subproject" >> "$LOG_FILE"
     done
   fi
 
@@ -186,11 +202,13 @@ for repository_dir in "${repositories[@]}"; do
     cd -- "$repository_dir"
     PATH="$QUARTO_BIN_DIR:$PATH" \
       "$RSCRIPT_BIN" -e 'iasi.quarto::build(); iasi.quarto::publish()'
-  ); then
+  ) >> "$LOG_FILE" 2>&1; then
     error "No se pudo construir o publicar: $repository_dir"
+    info "Consulta el log: $LOG_FILE"
     exit 1
   fi
 
+  printf "\n" >> "$LOG_FILE"
   success_detail "$repository_dir publicado."
 done
 
@@ -211,3 +229,4 @@ else
 fi
 
 success "${#repositories[@]} repositorio(s) Quarto construido(s) y publicado(s)."
+info "Log: $LOG_FILE"
