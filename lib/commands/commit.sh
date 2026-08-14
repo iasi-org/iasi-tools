@@ -9,7 +9,7 @@ source "$TOOLS_DIR/lib/core/messages.sh"
 
 usage() {
   cat <<'EOF'
-Usage: iasi-dev commit -m "message" [repository]
+Usage: iasi-dev commit -m "message" [repository...]
 
 Stages all changes, creates a commit, and pushes it to the configured remote.
 Without a repository, all Git repositories directly below the current directory
@@ -27,7 +27,7 @@ EOF
 }
 
 commit_message=""
-repository_argument=""
+repository_arguments=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -57,12 +57,7 @@ while [ "$#" -gt 0 ]; do
       exit 2
       ;;
     *)
-      if [ -n "$repository_argument" ]; then
-        error "Solo se puede indicar un repositorio."
-        usage >&2
-        exit 2
-      fi
-      repository_argument="$1"
+      repository_arguments+=("$1")
       shift
       ;;
   esac
@@ -76,7 +71,8 @@ fi
 
 repositories=()
 
-if [ -n "$repository_argument" ]; then
+if [ "${#repository_arguments[@]}" -gt 0 ]; then
+ for repository_argument in "${repository_arguments[@]}"; do
   if [ ! -d "$repository_argument" ]; then
     error "No existe el directorio de repositorio: $repository_argument"
     exit 2
@@ -91,6 +87,7 @@ if [ -n "$repository_argument" ]; then
 
   repositories+=("$repository_path")
   workspace_dir="$(dirname -- "$repository_path")"
+ done
 else
   workspace_dir="$PWD"
 
@@ -116,7 +113,7 @@ fi
 {
   printf "IASI commit started at %s\n" "$(date --iso-8601=seconds)"
   printf "Workspace: %s\n" "$workspace_dir"
-  printf "Repository: %s\n" "${repository_argument:-all}"
+  printf "Repositories: %s\n" "${repository_arguments[*]:-all}"
   printf "Message: %s\n\n" "$commit_message"
 } > "$log_file"
 

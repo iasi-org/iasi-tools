@@ -9,7 +9,7 @@ source "$TOOLS_DIR/lib/core/messages.sh"
 
 usage() {
   cat <<'EOF'
-Usage: iasi-dev deploy [-f|--full] [-m|--message "message"] [repository]
+Usage: iasi-dev deploy [-f|--full] [-m|--message "message"] [repository...]
 
 Commits regular repository changes and, when present, publish/ artifacts
 separately, then pushes the resulting commits. With --full, build and publish
@@ -30,7 +30,7 @@ EOF
 
 full=0
 commit_message="deploy"
-target_argument=""
+target_arguments=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -68,17 +68,22 @@ while [ "$#" -gt 0 ]; do
       exit 2
       ;;
     *)
-      if [ -n "$target_argument" ]; then
-        error "Solo se puede indicar un repositorio o workspace."
-        usage >&2
-        exit 2
-      fi
-      target_argument="$1"
+      target_arguments+=("$1")
       shift
       ;;
   esac
 done
 
+if [ "${#target_arguments[@]}" -gt 1 ]; then
+  for selected_target in "${target_arguments[@]}"; do
+    deploy_options=(-m "$commit_message")
+    [ "$full" -eq 1 ] && deploy_options=(-f "${deploy_options[@]}")
+    "$0" "${deploy_options[@]}" "$selected_target"
+  done
+  exit 0
+fi
+
+target_argument="${target_arguments[0]:-}"
 target="${target_argument:-$PWD}"
 
 if [ ! -d "$target" ]; then

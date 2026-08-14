@@ -17,7 +17,7 @@ fi
 usage() {
   if [ "$operation" = "build" ]; then
     cat <<'EOF'
-Usage: iasi-dev build [repository]
+Usage: iasi-dev build [repository...]
 
 Recursively finds repositories containing IASI Quarto projects, then runs
 iasi.quarto::build() once at each repository root. Directories named tests are
@@ -32,7 +32,7 @@ Options:
 EOF
   else
     cat <<'EOF'
-Usage: iasi-dev publish [repository]
+Usage: iasi-dev publish [repository...]
 
 Recursively finds repositories containing IASI Quarto projects, then runs
 iasi.quarto::publish() once at each repository root.
@@ -49,7 +49,7 @@ EOF
   fi
 }
 
-search_argument=""
+search_arguments=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -67,18 +67,20 @@ while [ "$#" -gt 0 ]; do
       exit 2
       ;;
     *)
-      if [ -n "$search_argument" ]; then
-        error "Solo se puede indicar un repositorio o directorio."
-        usage >&2
-        exit 2
-      fi
-      search_argument="$1"
+      search_arguments+=("$1")
       shift
       ;;
   esac
 done
 
-search_argument="${search_argument:-$PWD}"
+if [ "${#search_arguments[@]}" -gt 1 ]; then
+  for selected_target in "${search_arguments[@]}"; do
+    "$0" "$selected_target"
+  done
+  exit 0
+fi
+
+search_argument="${search_arguments[0]:-$PWD}"
 
 if [ ! -d "$search_argument" ]; then
   error "No existe el directorio: $search_argument"
@@ -240,7 +242,7 @@ for repository_dir in "${repositories[@]}"; do
     printf "Subprojects:\n" >> "$LOG_FILE"
 
     for subproject in "${subprojects[@]}"; do
-      info "- $subproject"
+      info "$subproject"
       printf -- "- %s\n" "$subproject" >> "$LOG_FILE"
     done
   fi

@@ -11,11 +11,15 @@ source "$TOOLS_DIR/lib/core/repositories.sh"
 
 usage() {
   cat <<EOF
-Usage: iasi pull [options] [repository]
+Usage: iasi-dev pull [options] [repository...]
 
 Synchronizes repositories from $IASI_ORG, always prioritizing the remote state.
-Without repository, all repositories are synchronized in the current directory.
-With a repository directory, only that repository is synchronized.
+The workspace is the directory that contains iasi-tools-dev. Without repository,
+all repositories in that workspace are synchronized. With repository names,
+only those root-level repository directories are synchronized.
+
+The repository argument is a directory name inside the IASI workspace, not a
+path. Its .git directory is expected at the repository root.
 
 Missing repositories are cloned. Existing repositories are reset to the remote
 default branch and untracked files are removed. Command output is written to
@@ -29,7 +33,7 @@ Options:
 EOF
 }
 
-repository_argument=""
+repository_arguments=()
 options=()
 assume_yes=0
 
@@ -42,12 +46,7 @@ for argument in "$@"; do
       options+=("$argument")
       ;;
     *)
-      if [ -n "$repository_argument" ]; then
-        error "Solo se puede indicar un directorio de repositorio."
-        usage >&2
-        exit 2
-      fi
-      repository_argument="$argument"
+      repository_arguments+=("$argument")
       ;;
   esac
 done
@@ -63,33 +62,19 @@ if [ "$IASI_HELP" -eq 1 ]; then
   exit 0
 fi
 
-selected_repository=""
+workspace_argument="$(cd -- "$TOOLS_DIR/.." && pwd)"
 
-if [ -n "$repository_argument" ]; then
-  if [ -d "$repository_argument" ]; then
-    repository_path="$(cd -- "$repository_argument" && pwd)"
-  else
-    repository_path="$repository_argument"
-    while [ "$repository_path" != "/" ] && [[ "$repository_path" == */ ]]; do
-      repository_path="${repository_path%/}"
-    done
-  fi
-
-  selected_repository="$(basename -- "$repository_path")"
-  workspace_argument="$(dirname -- "$repository_path")"
-
+for selected_repository in "${repository_arguments[@]}"; do
   if [[ ! "$selected_repository" =~ ^[a-zA-Z0-9._-]+$ ]] || \
      [ "$selected_repository" = "." ] || [ "$selected_repository" = ".." ]; then
-    error "Nombre de repositorio no válido: $selected_repository"
+    error "Indica solo nombres de directorio de repositorio dentro de $(basename -- "$workspace_argument"): $selected_repository"
     exit 2
   fi
-else
-  workspace_argument="$PWD"
-fi
+done
 
 if [ "$assume_yes" -eq 0 ]; then
-  if [ -n "$selected_repository" ]; then
-    confirmation_text="El estado local de $repository_argument se sobrescribirá con la versión remota."
+  if [ "${#repository_arguments[@]}" -gt 0 ]; then
+    confirmation_text="El estado local de ${repository_arguments[*]} se sobrescribirá con la versión remota."
   else
     confirmation_text="Los repositorios locales en $workspace_argument se sobrescribirán con las versiones remotas."
   fi
@@ -125,7 +110,7 @@ cd -- "$WORKSPACE_DIR"
   printf "IASI pull started at %s\n" "$(date --iso-8601=seconds)"
   printf "Organization: %s\n" "$IASI_ORG"
   printf "Workspace: %s\n" "$WORKSPACE_DIR"
-  printf "Repository: %s\n\n" "${selected_repository:-all}"
+  printf "Repositories: %s\n\n" "${repository_arguments[*]:-all}"
 } > "$LOG_FILE"
 
 if ! repositories="$(iasi_repositories 2>> "$LOG_FILE")"; then
@@ -134,16 +119,20 @@ if ! repositories="$(iasi_repositories 2>> "$LOG_FILE")"; then
   exit 1
 fi
 
-repository_found=0
+found_repositories=()
 
 while IFS='|' read -r name url default_branch; do
   [ -n "$name" ] || continue
 
-  if [ -n "$selected_repository" ] && [ "$name" != "$selected_repository" ]; then
-    continue
+  if [ "${#repository_arguments[@]}" -gt 0 ]; then
+    selected=0
+    for requested in "${repository_arguments[@]}"; do
+      [ "$name" = "$requested" ] && selected=1
+    done
+    [ "$selected" -eq 1 ] || continue
   fi
 
-  repository_found=1
+  found_repositories+=("$name")
 
   if [[ ! "$name" =~ ^[a-zA-Z0-9._-]+$ ]] || [ "$name" = "." ] || [ "$name" = ".." ]; then
     error "Nombre de repositorio no válido: $name"
@@ -208,11 +197,17 @@ while IFS='|' read -r name url default_branch; do
   success_detail "$name sincronizado."
 done <<< "$repositories"
 
-if [ -n "$selected_repository" ] && [ "$repository_found" -eq 0 ]; then
-  error "$selected_repository no pertenece a $IASI_ORG o está archivado."
-  detail "Consulta el log: $LOG_FILE"
-  exit 1
-fi
+for requested in "${repository_arguments[@]}"; do
+  found=0
+  for name in "${found_repositories[@]}"; do
+    [ "$requested" = "$name" ] && found=1
+  done
+  if [ "$found" -eq 0 ]; then
+    error "$requested no pertenece a $IASI_ORG o está archivado."
+    detail "Consulta el log: $LOG_FILE"
+    exit 1
+  fi
+done
 
 success "Repositorios sincronizados correctamente."
 detail "Log: $LOG_FILE"
