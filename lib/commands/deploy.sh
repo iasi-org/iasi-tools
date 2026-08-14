@@ -11,9 +11,8 @@ usage() {
   cat <<'EOF'
 Usage: iasi-dev deploy [-f|--full] [-m|--message "message"] [repository...]
 
-Commits regular repository changes and, when present, publish/ artifacts
-separately, then pushes the resulting commits. With --full, build and publish
-are run successfully before the normal deploy flow starts.
+Commits the current repository state and pushes it. With --full, build and
+publish are run successfully before the commit and push.
 
 Arguments:
   repository   Optional repository or workspace directory; current directory
@@ -135,53 +134,27 @@ mkdir -p -- "$LOG_DIR"
   printf "Message: %s\n\n" "$commit_message"
 } > "$LOG_FILE"
 
-regular_commits=0
-publish_commits=0
+commits=0
 
 for repository in "${repositories[@]}"; do
   name="$(basename -- "$repository")"
   printf "[%s]\n" "$name" >> "$LOG_FILE"
 
-  # Partition any previously staged publish changes before staging regular work.
-  git -C "$repository" reset --quiet -- publish >> "$LOG_FILE" 2>&1 || true
-
-  if ! git -C "$repository" add -A -- . ':(exclude)publish' >> "$LOG_FILE" 2>&1; then
-    error "No se pudieron preparar los cambios normales de $name."
+  if ! git -C "$repository" add -A -- . >> "$LOG_FILE" 2>&1; then
+    error "No se pudieron preparar los cambios de $name."
     warning "Consulta el log: $LOG_FILE"
     exit 1
   fi
 
   if git -C "$repository" diff --cached --quiet >> "$LOG_FILE" 2>&1; then
-    detail "$name no tiene cambios normales."
+    detail "$name no tiene cambios."
   else
     if ! git -C "$repository" commit -m "$commit_message" >> "$LOG_FILE" 2>&1; then
       error "No se pudo crear el commit de $name."
       warning "Consulta el log: $LOG_FILE"
       exit 1
     fi
-    regular_commits=$((regular_commits + 1))
-  fi
-
-  if [ -d "$repository/publish" ] ||
-     [ -n "$(git -C "$repository" ls-files -- publish)" ]; then
-    if ! git -C "$repository" add -A -- publish >> "$LOG_FILE" 2>&1; then
-      error "No se pudieron preparar los artefactos publish/ de $name."
-      warning "Consulta el log: $LOG_FILE"
-      exit 1
-    fi
-
-    if git -C "$repository" diff --cached --quiet >> "$LOG_FILE" 2>&1; then
-      detail "$name no tiene cambios en publish/."
-    else
-      if ! git -C "$repository" commit -m "$commit_message publish" >> "$LOG_FILE" 2>&1; then
-        error "No se pudo crear el commit publish de $name."
-        warning "Consulta el log: $LOG_FILE"
-        exit 1
-      fi
-      publish_commits=$((publish_commits + 1))
-    fi
-  else
-    detail "$name no tiene carpeta publish/."
+    commits=$((commits + 1))
   fi
 
   if ! git -C "$repository" push >> "$LOG_FILE" 2>&1; then
@@ -194,4 +167,4 @@ for repository in "${repositories[@]}"; do
   success_detail "$name desplegado."
 done
 
-success "$regular_commits commit(s) normales y $publish_commits commit(s) publish creados."
+success "$commits commit(s) creados."
