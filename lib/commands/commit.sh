@@ -9,43 +9,68 @@ source "$TOOLS_DIR/lib/core/messages.sh"
 
 usage() {
   cat <<'EOF'
-Usage: iasi commit "message" [repository]
+Usage: iasi-dev commit -m "message" [repository]
 
 Stages all changes, creates a commit, and pushes it to the configured remote.
 Without a repository, all Git repositories directly below the current directory
 are processed. With a repository directory, only that repository is processed.
 
 Arguments:
-  message      Required commit message
   repository   Optional repository directory or path
 
 Options:
+  -m, --message MESSAGE
+               Required commit message
+  -v           Show detailed information, including success messages
   -h, --help   Show this help
 EOF
 }
 
-if [ "$#" -eq 1 ] && { [ "$1" = "-h" ] || [ "$1" = "--help" ]; }; then
-  usage
-  exit 0
-fi
+commit_message=""
+repository_argument=""
 
-if [ "$#" -lt 1 ]; then
-  error "El mensaje del commit es obligatorio."
-  usage >&2
-  exit 2
-fi
-
-if [ "$#" -gt 2 ]; then
-  error "Solo se puede indicar un mensaje y un directorio de repositorio."
-  usage >&2
-  exit 2
-fi
-
-commit_message="$1"
-repository_argument="${2:-}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -m|--message)
+      if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        error "La opción $1 requiere un mensaje."
+        exit 2
+      fi
+      commit_message="$2"
+      shift 2
+      ;;
+    -v)
+      IASI_VERBOSITY=2
+      shift
+      ;;
+    --message=*)
+      commit_message="${1#*=}"
+      shift
+      ;;
+    -*)
+      error "Opción desconocida: $1"
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [ -n "$repository_argument" ]; then
+        error "Solo se puede indicar un repositorio."
+        usage >&2
+        exit 2
+      fi
+      repository_argument="$1"
+      shift
+      ;;
+  esac
+done
 
 if [ -z "$commit_message" ]; then
-  error "El mensaje del commit no puede estar vacío."
+  error "El mensaje del commit es obligatorio; usa -m o --message."
+  usage >&2
   exit 2
 fi
 
@@ -106,7 +131,7 @@ for repository in "${repositories[@]}"; do
 
   if ! git -C "$repository" add -A . >> "$log_file" 2>&1; then
     error "No se pudieron preparar los cambios de $name."
-    detail "Consulta el log: $log_file"
+    warning "Consulta el log: $log_file"
     exit 1
   fi
 
@@ -117,7 +142,7 @@ for repository in "${repositories[@]}"; do
   else
     if ! git -C "$repository" commit -m "$commit_message" >> "$log_file" 2>&1; then
       error "No se pudo crear el commit de $name."
-      detail "Consulta el log: $log_file"
+      warning "Consulta el log: $log_file"
       exit 1
     fi
 
@@ -126,7 +151,7 @@ for repository in "${repositories[@]}"; do
 
   if ! git -C "$repository" push >> "$log_file" 2>&1; then
     error "No se pudo publicar el commit de $name."
-    detail "Consulta el log: $log_file"
+    warning "Consulta el log: $log_file"
     exit 1
   fi
 
@@ -135,4 +160,3 @@ for repository in "${repositories[@]}"; do
 done
 
 success "$committed repositorio(s) confirmado(s) y publicado(s); $unchanged sin cambios."
-detail "Log: $log_file"

@@ -15,8 +15,10 @@ Available commands:
 - `iasi-dev clone [options] [workspace]`
 - `iasi-dev pull [options] [repository]`
 - `iasi-dev sync path [path...]`
-- `iasi-dev publish "message" [directory]`
-- `iasi-dev commit "message" [repository]`
+- `iasi-dev build [-v] [repository]`
+- `iasi-dev publish [-v] [repository]`
+- `iasi-dev deploy [-v] [-f|--full] [-m|--message "message"] [repository]`
+- `iasi-dev commit [-v] -m "message" [repository]`
 - `iasi-dev init [options] [workspace]`
 - `iasi-dev docker [start|stop|status]`
 - `iasi-dev help [command]`

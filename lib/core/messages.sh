@@ -32,7 +32,7 @@ detail() {
 }
 
 success() {
-  [ "$IASI_VERBOSITY" -ge 1 ] || return 0
+  [ "$IASI_VERBOSITY" -ge 2 ] || return 0
   _message "$_IASI_GREEN" "$1"
 }
 

@@ -7,49 +7,78 @@ TOOLS_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
 source "$TOOLS_DIR/lib/core/messages.sh"
 
+operation="${IASI_QUARTO_OPERATION:-publish}"
+
+if [ "$operation" != "build" ] && [ "$operation" != "publish" ]; then
+  error "Operación Quarto interna desconocida: $operation"
+  exit 2
+fi
+
 usage() {
-  cat <<'EOF'
-Usage: iasi-dev publish "message" [directory]
+  if [ "$operation" = "build" ]; then
+    cat <<'EOF'
+Usage: iasi-dev build [repository]
 
 Recursively finds repositories containing IASI Quarto projects, then runs
-iasi.quarto::build() and iasi.quarto::publish() once at each repository root.
+iasi.quarto::build() once at each repository root. Directories named tests are
+excluded from discovery.
+
+Arguments:
+  repository  Repository or directory to search; current directory by default
+
+Options:
+  -v           Show detailed information, including success messages
+  -h, --help  Show this help
+EOF
+  else
+    cat <<'EOF'
+Usage: iasi-dev publish [repository]
+
+Recursively finds repositories containing IASI Quarto projects, then runs
+iasi.quarto::publish() once at each repository root.
 Multiproject repositories are assembled into a single root publish/ directory.
-If every repository succeeds, all changes are committed and pushed.
 Directories named tests are excluded from discovery.
 
 Arguments:
-  message     Required commit message
-  directory   Directory to search; current directory by default
+  repository  Repository or directory to search; current directory by default
 
 Options:
+  -v           Show detailed information, including success messages
   -h, --help  Show this help
 EOF
+  fi
 }
 
-if [ "$#" -eq 1 ] && { [ "$1" = "-h" ] || [ "$1" = "--help" ]; }; then
-  usage
-  exit 0
-fi
+search_argument=""
 
-if [ "$#" -lt 1 ]; then
-  error "El mensaje del commit es obligatorio."
-  usage >&2
-  exit 2
-fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -v)
+      IASI_VERBOSITY=2
+      shift
+      ;;
+    -*)
+      error "Opción desconocida: $1"
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [ -n "$search_argument" ]; then
+        error "Solo se puede indicar un repositorio o directorio."
+        usage >&2
+        exit 2
+      fi
+      search_argument="$1"
+      shift
+      ;;
+  esac
+done
 
-if [ "$#" -gt 2 ]; then
-  error "Solo se puede indicar un mensaje y un directorio."
-  usage >&2
-  exit 2
-fi
-
-commit_message="$1"
-search_argument="${2:-$PWD}"
-
-if [ -z "$commit_message" ]; then
-  error "El mensaje del commit no puede estar vacío."
-  exit 2
-fi
+search_argument="${search_argument:-$PWD}"
 
 if [ ! -d "$search_argument" ]; then
   error "No existe el directorio: $search_argument"
@@ -57,8 +86,12 @@ if [ ! -d "$search_argument" ]; then
 fi
 
 SEARCH_DIR="$(cd -- "$search_argument" && pwd)"
-LOG_DIR="$SEARCH_DIR/logs"
-LOG_FILE="$LOG_DIR/iasi-publish-$(date +%Y%m%d%H%M%S).log"
+if search_repository="$(git -C "$SEARCH_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
+  LOG_DIR="$(dirname -- "$search_repository")/logs"
+else
+  LOG_DIR="$SEARCH_DIR/logs"
+fi
+LOG_FILE="$LOG_DIR/iasi-$operation-$(date +%Y%m%d%H%M%S).log"
 
 RSCRIPT_BIN="${IASI_RSCRIPT:-}"
 
@@ -111,9 +144,9 @@ if ! mkdir -p -- "$LOG_DIR"; then
 fi
 
 {
-  printf "IASI publish started at %s\n" "$(date --iso-8601=seconds)"
+  printf "IASI %s started at %s\n" "$operation" "$(date --iso-8601=seconds)"
   printf "Directory: %s\n" "$SEARCH_DIR"
-  printf "Message: %s\n\n" "$commit_message"
+  printf "Operation: %s\n\n" "$operation"
 } > "$LOG_FILE"
 
 repositories=()
@@ -167,7 +200,15 @@ if [ "${#repositories[@]}" -eq 0 ]; then
 fi
 
 for repository_dir in "${repositories[@]}"; do
-  info "Construyendo y publicando $repository_dir."
+  repository_name="$(basename -- "$repository_dir")"
+
+  if [ "$operation" = "build" ]; then
+    info "Construyendo $repository_name."
+    r_expression='iasi.quarto::build()'
+  else
+    info "Publicando $repository_name."
+    r_expression='iasi.quarto::publish()'
+  fi
   printf "[%s]\n" "$repository_dir" >> "$LOG_FILE"
 
   subprojects=()
@@ -201,32 +242,15 @@ for repository_dir in "${repositories[@]}"; do
   if ! (
     cd -- "$repository_dir"
     PATH="$QUARTO_BIN_DIR:$PATH" \
-      "$RSCRIPT_BIN" -e 'iasi.quarto::build(); iasi.quarto::publish()'
+      "$RSCRIPT_BIN" -e "$r_expression"
   ) >> "$LOG_FILE" 2>&1; then
-    error "No se pudo construir o publicar: $repository_dir"
-    info "Consulta el log: $LOG_FILE"
+    error "No se pudo ejecutar $operation: $repository_dir"
+    warning "Consulta el log: $LOG_FILE"
     exit 1
   fi
 
   printf "\n" >> "$LOG_FILE"
-  success_detail "$repository_dir publicado."
+  success_detail "$repository_name: $operation completado."
 done
 
-repository=""
-if repository_candidate="$(git -C "$SEARCH_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
-  repository="$repository_candidate"
-fi
-
-info "Confirmando y publicando los cambios en Git."
-
-if [ -n "$repository" ]; then
-  "$TOOLS_DIR/lib/commands/commit.sh" "$commit_message" "$repository"
-else
-  (
-    cd -- "$SEARCH_DIR"
-    "$TOOLS_DIR/lib/commands/commit.sh" "$commit_message"
-  )
-fi
-
-success "${#repositories[@]} repositorio(s) Quarto construido(s) y publicado(s)."
-info "Log: $LOG_FILE"
+success "${#repositories[@]} repositorio(s) Quarto: $operation completado."
