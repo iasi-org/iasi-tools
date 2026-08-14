@@ -86,8 +86,9 @@ if [ ! -d "$search_argument" ]; then
 fi
 
 SEARCH_DIR="$(cd -- "$search_argument" && pwd)"
-if search_repository="$(git -C "$SEARCH_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
-  LOG_DIR="$(dirname -- "$search_repository")/logs"
+SEARCH_REPOSITORY=""
+if SEARCH_REPOSITORY="$(git -C "$SEARCH_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
+  LOG_DIR="$(dirname -- "$SEARCH_REPOSITORY")/logs"
 else
   LOG_DIR="$SEARCH_DIR/logs"
 fi
@@ -152,6 +153,11 @@ fi
 repositories=()
 
 if [ -f "$SEARCH_DIR/_quarto.yml" ] && [ -f "$SEARCH_DIR/_iasi.yml" ]; then
+  repositories+=("$SEARCH_DIR")
+elif [ -n "$SEARCH_REPOSITORY" ] && [ "$SEARCH_DIR" != "$SEARCH_REPOSITORY" ]; then
+  # Keep an explicitly selected nested directory as the processing scope.
+  # iasi.quarto will discover any publications below it without expanding the
+  # operation to the enclosing repository.
   repositories+=("$SEARCH_DIR")
 else
   while IFS= read -r -d '' quarto_file; do
