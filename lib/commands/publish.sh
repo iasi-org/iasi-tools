@@ -194,6 +194,7 @@ else
     find "$SEARCH_DIR" \
       -path '*/.git' -prune -o \
       -path '*/.quarto' -prune -o \
+      -path '*/publish' -prune -o \
       -path '*/.codex*' -prune -o \
       -path '*/tests' -prune -o \
       -path '*/node_modules' -prune -o \
@@ -211,6 +212,12 @@ for repository_dir in "${repositories[@]}"; do
   repository_name="$(basename -- "$repository_dir")"
 
   if [ "$operation" = "build" ]; then
+    publish_dir="$repository_dir/publish"
+
+    if [ -d "$publish_dir" ]; then
+      rm -rf -- "$publish_dir"
+    fi
+
     info "Construyendo $repository_name."
     r_expression='iasi.quarto::build()'
   else
@@ -230,6 +237,7 @@ for repository_dir in "${repositories[@]}"; do
     find "$repository_dir" \
       -path '*/.git' -prune -o \
       -path '*/.quarto' -prune -o \
+      -path '*/publish' -prune -o \
       -path '*/.codex*' -prune -o \
       -path '*/tests' -prune -o \
       -path '*/node_modules' -prune -o \
