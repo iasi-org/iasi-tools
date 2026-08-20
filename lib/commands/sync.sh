@@ -12,9 +12,11 @@ usage() {
 Usage: iasi-dev sync path [path...]
 
 Propagates files or directories from iasi-common to every existing copy in the
-IASI workspace. Entries are matched by name. A directory copy is replaced in
-full, including removal of files that no longer exist in iasi-common.
-iasi-common and Git metadata are excluded, and missing copies are not created.
+IASI workspace. A simple name is matched by name; a path such as dir/subdir is
+resolved relative to iasi-common and matched by that same path. Directory
+contents are merged: existing files are updated, missing files are created, and
+destination-only files are preserved. iasi-common and Git metadata are excluded,
+and missing copies are not created.
 
 Options:
   -h, --help   Show this help
@@ -54,29 +56,52 @@ for argument in "$@"; do
   entry_name="$(basename -- "$argument")"
   source=""
   source_type=""
+  path_argument=false
 
-  while IFS= read -r -d '' candidate; do
-    if [ -n "$source" ]; then
-      error "Hay más de una entrada llamada $entry_name en iasi-common."
+  if [[ "$argument" == */* ]]; then
+    path_argument=true
+
+    if [[ "$argument" = /* || "/$argument/" == *"/../"* ]]; then
+      error "La ruta debe ser relativa a iasi-common: $argument"
       exit 1
     fi
 
-    source="$candidate"
+    source="$COMMON_DIR/${argument#./}"
 
-    if [ -d "$candidate" ]; then
+    if [ ! -e "$source" ]; then
+      error "No se encontró $argument en iasi-common."
+      exit 1
+    fi
+
+    if [ -d "$source" ]; then
       source_type="directory"
     else
       source_type="file"
     fi
-  done < <(
-    find "$COMMON_DIR" \
-      -path '*/.git' -prune -o \
-      \( -type f -o -type d \) -name "$entry_name" -print0
-  )
+  else
+    while IFS= read -r -d '' candidate; do
+      if [ -n "$source" ]; then
+        error "Hay más de una entrada llamada $entry_name en iasi-common."
+        exit 1
+      fi
 
-  if [ -z "$source" ]; then
-    error "No se encontró $entry_name en iasi-common."
-    exit 1
+      source="$candidate"
+
+      if [ -d "$candidate" ]; then
+        source_type="directory"
+      else
+        source_type="file"
+      fi
+    done < <(
+      find "$COMMON_DIR" \
+        -path '*/.git' -prune -o \
+        \( -type f -o -type d \) -name "$entry_name" -print0
+    )
+
+    if [ -z "$source" ]; then
+      error "No se encontró $entry_name en iasi-common."
+      exit 1
+    fi
   fi
 
   found=0
@@ -92,10 +117,17 @@ for argument in "$@"; do
       found=$((found + 1))
       synced=$((synced + 1))
     done < <(
-      find "$WORKSPACE_DIR" \
-        -path "$COMMON_DIR" -prune -o \
-        -path '*/.git' -prune -o \
-        -type f -name "$entry_name" -print0
+      if [ "$path_argument" = true ]; then
+        find "$WORKSPACE_DIR" \
+          -path "$COMMON_DIR" -prune -o \
+          -path '*/.git' -prune -o \
+          -type f -path "*/${argument#./}" -print0
+      else
+        find "$WORKSPACE_DIR" \
+          -path "$COMMON_DIR" -prune -o \
+          -path '*/.git' -prune -o \
+          -type f -name "$entry_name" -print0
+      fi
     )
   else
     while IFS= read -r -d '' target; do
@@ -107,8 +139,8 @@ for argument in "$@"; do
           ;;
       esac
 
-      if ! rm -rf -- "$target" || ! mkdir -p -- "$target" || ! cp -a -- "$source/." "$target/"; then
-        error "No se pudo reemplazar el directorio: $target"
+      if ! cp -a -- "$source/." "$target/"; then
+        error "No se pudo sincronizar el directorio: $target"
         exit 1
       fi
 
@@ -116,17 +148,27 @@ for argument in "$@"; do
       found=$((found + 1))
       synced=$((synced + 1))
     done < <(
-      find "$WORKSPACE_DIR" \
-        -path "$COMMON_DIR" -prune -o \
-        -path '*/.git' -prune -o \
-        -type d -name "$entry_name" -print0 -prune
+      if [ "$path_argument" = true ]; then
+        find "$WORKSPACE_DIR" \
+          -path "$COMMON_DIR" -prune -o \
+          -path '*/.git' -prune -o \
+          -type d -path "*/${argument#./}" -print0 -prune
+      else
+        find "$WORKSPACE_DIR" \
+          -path "$COMMON_DIR" -prune -o \
+          -path '*/.git' -prune -o \
+          -type d -name "$entry_name" -print0 -prune
+      fi
     )
   fi
 
+  display_name="$entry_name"
+  if [ "$path_argument" = true ]; then display_name="${argument#./}"; fi
+
   if [ "$found" -eq 0 ]; then
-    warning "No existen copias de $entry_name fuera de iasi-common."
+    warning "No existen copias de $display_name fuera de iasi-common."
   else
-    info "$entry_name: $found copia(s) actualizada(s)."
+    info "$display_name: $found copia(s) actualizada(s)."
   fi
 done
 
